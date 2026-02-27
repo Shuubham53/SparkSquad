@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import toast from 'react-hot-toast';
-import { useAuth } from '../context/authContext';
+import { useAuth } from '../context/AuthContext';
 import DashboardLayout from '../components/layout/DashboardLayout';
 import StatsCard from '../components/ui/StatsCard';
 import EmptyState from '../components/ui/EmptyState';
