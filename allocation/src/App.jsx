@@ -1,69 +1,83 @@
-import { Suspense, lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { useAuth } from './context/AuthContext';
+import { useAuth } from './context/authContext';
+import Login from './pages/';
+import StudentDashboard from './pages/studentDashboard';
+import CompanyDashboard from './pages/CompanyDashboard';
 
-const LandingPage = lazy(() => import('./pages/LandingPage'));
-const StudentLogin = lazy(() => import('./pages/StudentLogin'));
-const CompanyLogin = lazy(() => import('./pages/CompanyLogin'));
-const StudentRegister = lazy(() => import('./pages/StudentRegister'));
-const CompanyRegister = lazy(() => import('./pages/CompanyRegister'));
-const StudentDashboard = lazy(() => import('./pages/StudentDashboard'));
-const CompanyDashboard = lazy(() => import('./pages/CompanyDashboard'));
-
-function PageLoader() {
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
-      <div className="text-center">
-        <div className="w-10 h-10 border-4 border-indigo-200 dark:border-indigo-900 border-t-indigo-600 dark:border-t-indigo-400 rounded-full animate-spin mx-auto mb-3" />
-        <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">Loading...</p>
-      </div>
-    </div>
-  );
-}
-
-function ProtectedRoute({ children, role }) {
-  const { user } = useAuth();
-  if (!user) return <Navigate to="/" replace />;
-  if (role && user.role !== role) return <Navigate to="/" replace />;
+// Public Route Wrapper (Login page ke liye)
+const PublicRoute = ({ children }) => {
+  const { user, userRole, loading } = useAuth();
+  
+  if (loading) return <div className="flex h-screen items-center justify-center">Loading...</div>;
+  
+  if (user) {
+    return userRole === 'company' 
+      ? <Navigate to="/company-dashboard" /> 
+      : <Navigate to="/student-dashboard" />;
+  }
   return children;
-}
+};
 
-export default function App() {
-  const { user } = useAuth();
+// Private Route Wrapper (Dashboards ke liye)
+const PrivateRoute = ({ children, role }) => {
+  const { user, userRole, loading } = useAuth();
+  
+  if (loading) return <div className="flex h-screen items-center justify-center">Loading...</div>;
+  
+  if (!user) return <Navigate to="/login" />;
+  
+  if (role && userRole !== role) {
+    return userRole === 'company' 
+      ? <Navigate to="/company-dashboard" /> 
+      : <Navigate to="/student-dashboard" />;
+  }
+  
+  return children;
+};
 
+function App() {
   return (
-    <Suspense fallback={<PageLoader />}>
-      <Routes>
-        <Route
-          path="/"
-          element={
-            user
-              ? <Navigate to={user.role === 'student' ? '/student/dashboard' : '/company/dashboard'} replace />
-              : <LandingPage />
-          }
-        />
-        <Route path="/student/login" element={<StudentLogin />} />
-        <Route path="/company/login" element={<CompanyLogin />} />
-        <Route path="/student/register" element={<StudentRegister />} />
-        <Route path="/company/register" element={<CompanyRegister />} />
-        <Route
-          path="/student/dashboard"
-          element={
-            <ProtectedRoute role="student">
-              <StudentDashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/company/dashboard"
-          element={
-            <ProtectedRoute role="company">
-              <CompanyDashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Suspense>
+    <Routes>
+      {/* 1. Default Route */}
+      <Route path="/" element={
+        <PrivateRoute>
+          <DashboardSwitch />
+        </PrivateRoute>
+      } />
+
+      {/* 2. Authentication Route */}
+      <Route path="/login" element={
+        <PublicRoute>
+          <Login />
+        </PublicRoute>
+      } />
+
+      {/* 3. Student Dashboard Route */}
+      <Route path="/student-dashboard" element={
+        <PrivateRoute role="student">
+          <StudentDashboard />
+        </PrivateRoute>
+      } />
+
+      {/* 4. Company Dashboard Route */}
+      <Route path="/company-dashboard" element={
+        <PrivateRoute role="company">
+          <CompanyDashboard />
+        </PrivateRoute>
+      } />
+
+      {/* 5. Catch All - Redirect to Home */}
+      <Route path="*" element={<Navigate to="/" />} />
+    </Routes>
   );
 }
+
+// Helper component for initial redirection
+const DashboardSwitch = () => {
+  const { userRole } = useAuth();
+  return userRole === 'company' 
+    ? <Navigate to="/company-dashboard" /> 
+    : <Navigate to="/student-dashboard" />;
+};
+
+export default App;

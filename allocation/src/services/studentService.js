@@ -1,95 +1,99 @@
-import { KEYS, getList, set, generateId } from '../utils/storage';
+import { db } from '../config/firebase'; 
+import { 
+  doc, 
+  getDoc, 
+  updateDoc, 
+  collection, 
+  getDocs, 
+  query, 
+  where, 
+  addDoc,
+  arrayUnion 
+} from 'firebase/firestore';
 import { calculateMatch } from '../utils/skillDatabase';
 
 /**
- * Get student profile by id.
+ * Get student profile from Firestore.
  */
-export function getStudentProfile(studentId) {
-  const student = getList(KEYS.STUDENTS).find((s) => s.id === studentId);
-  if (!student) throw new Error('Student not found');
-  const { password, ...profile } = student;
-  // Modular profile completion calculation
-  const fields = ['name', 'email', 'phone', 'college', 'degree', 'year', 'interests', 'preferredRole'];
+export async function getStudentProfile(studentId) {
+  const docRef = doc(db, "users", studentId);
+  const docSnap = await getDoc(docRef);
+  
+  if (!docSnap.exists()) throw new Error('Student not found');
+  
+  const profile = docSnap.data();
+  
+  // Profile completion logic (Updated to include Location and CGPA)
+  const fields = ['name', 'email', 'phone', 'college', 'degree', 'year', 'interests', 'preferredRole', 'location', 'cgpa'];
   let completion = 0;
-  if (fields.every(f => !!profile[f])) completion += 20;
+  
+  // Checking basic fields
+  const filledFields = fields.filter(f => !!profile[f]);
+  completion += (filledFields.length / fields.length) * 30; // 30% for basic info
+
   if ((profile.skills?.length || 0) + (profile.extractedSkills?.length || 0) > 0) completion += 20;
   if (profile.resumeFile || profile.resumeText) completion += 30;
   if (profile.interests && profile.interests.length > 0) completion += 10;
-  if (Array.isArray(profile.experience) && profile.experience.length > 0) completion += 20;
-  profile.profileCompletion = Math.min(100, completion);
-  return profile;
+  if (Array.isArray(profile.experience) && profile.experience.length > 0) completion += 10;
+  
+  return { ...profile, id: studentId, profileCompletion: Math.min(100, Math.round(completion)) };
 }
 
 /**
- * Update student profile fields.
+ * Update student profile in Firestore.
  */
-export function updateStudentProfile(studentId, updates) {
-  const students = getList(KEYS.STUDENTS);
-  const idx = students.findIndex((s) => s.id === studentId);
-  if (idx === -1) throw new Error('Student not found');
-  students[idx] = { ...students[idx], ...updates };
-  set(KEYS.STUDENTS, students);
-  return students[idx];
+export async function updateStudentProfile(studentId, updates) {
+  const studentRef = doc(db, "users", studentId);
+  await updateDoc(studentRef, {
+    ...updates,
+    updatedAt: new Date().toISOString()
+  });
+  return { id: studentId, ...updates };
 }
 
 /**
- * Store extracted skills, resume text, and optional base64 resume file on a student.
+ * Get Suggested Internships based on AI Match (including Location & CGPA).
  */
-export function saveResumeSkills(studentId, extractedSkills, resumeText, resumeFile) {
-  const students = getList(KEYS.STUDENTS);
-  const idx = students.findIndex((s) => s.id === studentId);
-  if (idx === -1) throw new Error('Student not found');
-  students[idx].extractedSkills = extractedSkills;
-  students[idx].resumeText = resumeText;
-  if (resumeFile !== undefined) students[idx].resumeFile = resumeFile;
-  set(KEYS.STUDENTS, students);
-  return students[idx];
-}
+export async function getSuggestedInternships(studentId) {
+  // 1. Get student profile with new fields
+  const student = await getStudentProfile(studentId);
+  const allSkills = [
+    ...new Set([
+      ...(student.skills || []).map(s => s.toLowerCase()),
+      ...(student.extractedSkills || []).map(s => s.toLowerCase())
+    ])
+  ];
 
-/**
- * Get full student profile by id (for company HR viewing).
- * Includes all fields: skills, extractedSkills, resumeFile, resumeText, etc.
- */
-export function getFullStudentProfile(studentId) {
-  const student = getList(KEYS.STUDENTS).find((s) => s.id === studentId);
-  if (!student) return null;
-  const { password, ...profile } = student;
-  return profile;
-}
+  // 2. Get active internships from Firestore
+  const q = query(collection(db, "internships"), where("isActive", "==", true));
+  const querySnapshot = await getDocs(q);
+  
+  const internships = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-/**
- * Get all skills for a student (manual + extracted, deduplicated).
- */
-export function getAllStudentSkills(studentId) {
-  const student = getList(KEYS.STUDENTS).find((s) => s.id === studentId);
-  if (!student) return [];
-  const combined = new Set([
-    ...(student.skills || []).map((s) => s.toLowerCase()),
-    ...(student.extractedSkills || []).map((s) => s.toLowerCase()),
-  ]);
-  return [...combined];
-}
-
-/**
- * Get ALL active internships for the student, sorted by match %.
- * Every internship stored in LocalStorage is visible to every student.
- */
-export function getSuggestedInternships(studentId) {
-  const allSkills = getAllStudentSkills(studentId);
-  const internships = getList(KEYS.INTERNSHIPS).filter((i) => i.isActive);
-  const companies = getList(KEYS.COMPANIES);
-
+  // 3. Map and Sort by Match % using Skills, Location, and CGPA
   return internships
     .map((internship) => {
-      const { matchPercentage, matchedSkills, missingSkills } = calculateMatch(allSkills, internship.requiredSkills);
-      const company = companies.find((c) => c.id === internship.companyId) || {};
+      // Skill Match
+      const { matchPercentage, matchedSkills, missingSkills } = calculateMatch(allSkills, internship.requiredSkills || []);
+      
+      let finalMatchScore = matchPercentage;
+
+      // Location Match Bonus (+10% score if location matches)
+      if (student.location && internship.location && 
+          student.location.toLowerCase().includes(internship.location.toLowerCase())) {
+        finalMatchScore += 10;
+      }
+
+      // CGPA criteria (Basic check: if student CGPA is >= 8.0, slight boost)
+      if (parseFloat(student.cgpa) >= 8.0) {
+        finalMatchScore += 5;
+      }
+
       return {
         ...internship,
-        matchPercentage,
+        matchPercentage: Math.min(100, Math.round(finalMatchScore)),
         matchedSkills,
         missingSkills,
-        companyName: internship.companyName || company.companyName || 'Unknown',
-        companyIndustry: company.industry || '',
       };
     })
     .sort((a, b) => b.matchPercentage - a.matchPercentage);
@@ -97,116 +101,106 @@ export function getSuggestedInternships(studentId) {
 
 /**
  * Apply to an internship.
- * Stores rich applicant object in internship.applicants[]
- * and tracking entry in student.appliedInternships[].
  */
-export function applyToInternship(studentId, internshipId) {
-  // 1. Get student
-  const students = getList(KEYS.STUDENTS);
-  const stIdx = students.findIndex((s) => s.id === studentId);
-  if (stIdx === -1) throw new Error('Student not found');
-  const student = students[stIdx];
+export async function applyToInternship(studentId, internshipId) {
+  const studentRef = doc(db, "users", studentId);
+  const internshipRef = doc(db, "internships", internshipId);
 
-  // 2. Check if already applied
-  if (!student.appliedInternships) student.appliedInternships = [];
-  if (student.appliedInternships.find((a) => a.internshipId === internshipId)) {
+  const studentSnap = await getDoc(studentRef);
+  const internshipSnap = await getDoc(internshipRef);
+
+  if (!studentSnap.exists() || !internshipSnap.exists()) throw new Error('Data not found');
+
+  const student = studentSnap.data();
+  const internship = internshipSnap.data();
+
+  // Check if already applied
+  if (student.appliedInternships?.some(app => app.internshipId === internshipId)) {
     throw new Error('Already applied to this internship');
   }
 
-  // 3. Calculate match
-  const allSkills = [
-    ...new Set([
-      ...(student.skills || []).map((s) => s.toLowerCase()),
-      ...(student.extractedSkills || []).map((s) => s.toLowerCase()),
-    ]),
-  ];
+  // Calculate Match % including new factors for the application record
+  const allSkills = [...new Set([...(student.skills || []), ...(student.extractedSkills || [])])];
+  let { matchPercentage } = calculateMatch(allSkills, internship.requiredSkills || []);
+  
+  // Add Location Bonus to application record
+  if (student.location && internship.location && 
+      student.location.toLowerCase().includes(internship.location.toLowerCase())) {
+    matchPercentage = Math.min(100, matchPercentage + 10);
+  }
 
-  const internships = getList(KEYS.INTERNSHIPS);
-  const intIdx = internships.findIndex((i) => i.id === internshipId);
-  if (intIdx === -1) throw new Error('Internship not found');
-
-  const { matchPercentage } = calculateMatch(allSkills, internships[intIdx].requiredSkills);
-
-  // 4. Add rich applicant object to internship.applicants
-  if (!internships[intIdx].applicants) internships[intIdx].applicants = [];
-  internships[intIdx].applicants.push({
+  const applicationData = {
     studentId,
     studentName: student.name,
     email: student.email,
-    extractedSkills: allSkills,
-    matchPercentage,
+    location: student.location || 'Not Provided',
+    cgpa: student.cgpa || 'N/A',
+    matchPercentage: Math.round(matchPercentage),
     status: 'pending',
-  });
-  set(KEYS.INTERNSHIPS, internships);
+    appliedAt: new Date().toISOString()
+  };
 
-  // 5. Add to student.appliedInternships
-  student.appliedInternships.push({
-    internshipId,
-    status: 'pending',
+  // Update Firestore (Atomic Updates)
+  await updateDoc(internshipRef, {
+    applicants: arrayUnion(applicationData)
   });
-  students[stIdx] = student;
-  set(KEYS.STUDENTS, students);
 
-  // 6. Also store in APPLICATIONS for backward compatibility
-  const applications = getList(KEYS.APPLICATIONS);
-  applications.push({
-    id: generateId(),
-    studentId,
-    internshipId,
-    status: 'pending',
-    appliedAt: new Date().toISOString(),
+  await updateDoc(studentRef, {
+    appliedInternships: arrayUnion({
+      internshipId,
+      status: 'pending',
+      appliedAt: new Date().toISOString()
+    })
   });
-  set(KEYS.APPLICATIONS, applications);
 
   return { internshipId, status: 'pending' };
 }
 
 /**
- * Get all internships a student has applied to, with current status.
- * Reads from student.appliedInternships and syncs latest status
- * from internship.applicants[].
+ * Save Resume Skills and update Firestore.
  */
-export function getAppliedInternships(studentId) {
-  const students = getList(KEYS.STUDENTS);
-  const student = students.find((s) => s.id === studentId);
-  if (!student) return [];
+export async function saveResumeSkills(studentId, skills, text, resumeBase64) {
+  const studentRef = doc(db, "users", studentId);
+  await updateDoc(studentRef, {
+    extractedSkills: skills,
+    resumeText: text,
+    resumeFile: resumeBase64,
+    updatedAt: new Date().toISOString()
+  });
+}
 
-  // Primary source: student.appliedInternships
-  let appliedList = student.appliedInternships || [];
-
-  // Fallback: merge any entries only in legacy APPLICATIONS
-  const legacyApps = getList(KEYS.APPLICATIONS).filter((a) => a.studentId === studentId);
-  const existingIds = new Set(appliedList.map((a) => a.internshipId));
-  for (const app of legacyApps) {
-    if (!existingIds.has(app.internshipId)) {
-      appliedList.push({ internshipId: app.internshipId, status: app.status });
-    }
-  }
-
-  const internships = getList(KEYS.INTERNSHIPS);
-  const companies = getList(KEYS.COMPANIES);
-  const allSkills = getAllStudentSkills(studentId);
-
-  return appliedList
-    .map((app) => {
-      const internship = internships.find((i) => i.id === app.internshipId);
-      if (!internship) return null;
-      const company = companies.find((c) => c.id === internship.companyId) || {};
-      const { matchPercentage, matchedSkills, missingSkills } = calculateMatch(allSkills, internship.requiredSkills || []);
-
-      // Get latest status from internship.applicants (source of truth for accept/reject)
-      const applicantEntry = (internship.applicants || []).find((a) => a.studentId === studentId);
-      const latestStatus = applicantEntry?.status || app.status;
-
-      return {
-        ...internship,
-        applicationStatus: latestStatus,
-        matchPercentage,
-        matchedSkills,
-        missingSkills,
-        companyName: internship.companyName || company.companyName || 'Unknown',
-        companyIndustry: company.industry || '',
-      };
+/**
+ * Get Applied Internships for a student.
+ */
+export async function getAppliedInternships(studentId) {
+  const studentRef = doc(db, "users", studentId);
+  const studentSnap = await getDoc(studentRef);
+  
+  if (!studentSnap.exists()) return [];
+  
+  const studentData = studentSnap.data();
+  const applied = studentData.appliedInternships || [];
+  
+  if (applied.length === 0) return [];
+  
+  // Fetch full internship details for each application
+  const fullAppliedList = await Promise.all(
+    applied.map(async (app) => {
+      const iRef = doc(db, "internships", app.internshipId);
+      const iSnap = await getDoc(iRef);
+      if (iSnap.exists()) {
+        const internshipData = iSnap.data();
+        // Sync application status from the internship's applicant list if needed
+        return { 
+          ...internshipData, 
+          id: app.internshipId, 
+          applicationStatus: app.status, 
+          appliedAt: app.appliedAt 
+        };
+      }
+      return null;
     })
-    .filter(Boolean);
+  );
+  
+  return fullAppliedList.filter(Boolean);
 }

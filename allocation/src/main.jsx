@@ -1,32 +1,16 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
-import { Toaster } from 'react-hot-toast';
-import App from './App.jsx';
-import { AuthProvider } from './context/AuthContext.jsx';
-import { ThemeProvider } from './context/ThemeContext.jsx';
+import App from './App';
+import { AuthProvider } from './context/authContext';
 import './index.css';
-
+import { Toaster } from 'react-hot-toast';
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <ThemeProvider>
-        <AuthProvider>
-          <App />
-          <Toaster
-            position="top-right"
-            toastOptions={{
-              duration: 3000,
-              style: {
-                borderRadius: '12px',
-                padding: '12px 16px',
-                fontSize: '14px',
-                fontFamily: 'Inter, system-ui, sans-serif',
-              },
-            }}
-          />
-        </AuthProvider>
-      </ThemeProvider>
+    <BrowserRouter> {/* Browser Router yahan hona chahiye */}
+      <AuthProvider>
+        <App />
+      </AuthProvider>
     </BrowserRouter>
   </React.StrictMode>
 );
