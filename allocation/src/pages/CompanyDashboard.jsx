@@ -45,26 +45,27 @@ export default function CompanyDashboard() {
   const [postSkills, setPostSkills] = useState([]);
   const [postSkillInput, setPostSkillInput] = useState('');
 
-  const loadData = useCallback(() => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const prof = getCompanyProfile(user.id);
+      const prof = await getCompanyProfile(user.id);
       setProfile(prof);
       setEditForm(prof);
-      const myInternships = getMyInternships(user.id);
+      const myInternships = await getMyInternships(user.id);
       setInternships(myInternships);
       // Collect all accepted applicants across all internships using getApplicants for full details
       const accepted = [];
-      myInternships.forEach(int => {
-        const apps = getApplicants(int.id);
+      for (const int of myInternships) {
+        const apps = await getApplicants(int.id);
         apps.forEach(app => {
           if (app.applicationStatus === 'accepted') {
             accepted.push({ ...app, internship: int });
           }
         });
-      });
+      }
       setAcceptedApplicants(accepted);
-    } catch {
+    } catch (error) {
+      console.error('Error loading data:', error);
       toast.error('Failed to load data');
     } finally {
       setLoading(false);
@@ -75,16 +76,16 @@ export default function CompanyDashboard() {
 
   /* ────── Internship Actions ────── */
 
-  const handlePostInternship = useCallback((e) => {
+  const handlePostInternship = useCallback(async (e) => {
     e.preventDefault();
     if (postSkills.length === 0) return toast.error('Add at least one required skill');
     setPosting(true);
     try {
-      postInternshipSvc(user.id, { ...postForm, requiredSkills: postSkills });
+      await postInternshipSvc(user.id, { ...postForm, requiredSkills: postSkills });
       toast.success('Internship posted!');
       setPostForm({ role: '', description: '', stipend: '', duration: '', location: 'Remote' });
       setPostSkills([]);
-      loadData();
+      await loadData();
       setActive('manage');
     } catch (err) {
       toast.error(err.message || 'Failed to post');
@@ -102,60 +103,66 @@ export default function CompanyDashboard() {
     }
   }, [postSkillInput, postSkills]);
 
-  const handleViewApplicants = useCallback((internship) => {
+  const handleViewApplicants = useCallback(async (internship) => {
     setSelectedInternship(internship);
     setActive('applicants');
     try {
-      setApplicants(getApplicants(internship.id));
-    } catch {
+      const apps = await getApplicants(internship.id);
+      setApplicants(apps);
+    } catch (error) {
+      console.error('Error loading applicants:', error);
       toast.error('Failed to load applicants');
     }
   }, []);
 
-  const handleApplicantStatus = useCallback((studentId, status) => {
+  const handleApplicantStatus = useCallback(async (studentId, status) => {
     if (!selectedInternship) return;
     try {
-      updateApplicantStatus(selectedInternship.id, studentId, status);
+      await updateApplicantStatus(selectedInternship.id, studentId, status);
       toast.success(`Applicant ${status}`);
       setApplicants(prev => prev.map(a => a.id === studentId ? { ...a, applicationStatus: status } : a));
       // Also update if profile modal is open for this student
       setProfileApplicant(prev => prev && prev.id === studentId ? { ...prev, applicationStatus: status } : prev);
-    } catch {
+    } catch (error) {
+      console.error('Error updating applicant:', error);
       toast.error('Failed to update');
     }
   }, [selectedInternship]);
 
-  const confirmDeleteInternship = useCallback(() => {
+  const confirmDeleteInternship = useCallback(async () => {
     if (!deleteModal) return;
     try {
-      deleteInternshipSvc(deleteModal);
+      await deleteInternshipSvc(deleteModal);
       toast.success('Internship deleted');
       setDeleteModal(null);
-      loadData();
-    } catch {
+      await loadData();
+    } catch (error) {
+      console.error('Error deleting internship:', error);
       toast.error('Delete failed');
     }
   }, [deleteModal, loadData]);
 
-  const handleToggleActive = useCallback((internship) => {
+  const handleToggleActive = useCallback(async (internship) => {
     try {
-      updateInternshipSvc(internship.id, { isActive: !internship.isActive });
+      await updateInternshipSvc(internship.id, { isActive: !internship.isActive });
       toast.success(internship.isActive ? 'Deactivated' : 'Activated');
-      loadData();
-    } catch {
+      await loadData();
+    } catch (error) {
+      console.error('Error toggling internship:', error);
       toast.error('Update failed');
     }
   }, [loadData]);
 
-  const handleProfileUpdate = useCallback(() => {
+  const handleProfileUpdate = useCallback(async () => {
     try {
       const { role, id, email, createdAt, password, ...rest } = editForm;
-      updateCompanyProfile(user.id, rest);
-      refreshUser();
+      await updateCompanyProfile(user.id, rest);
+      await refreshUser();
       toast.success('Profile updated!');
       setEditMode(false);
-      loadData();
-    } catch {
+      await loadData();
+    } catch (error) {
+      console.error('Error updating profile:', error);
       toast.error('Update failed');
     }
   }, [editForm, user.id, refreshUser, loadData]);

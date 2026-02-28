@@ -30,7 +30,7 @@ export default function LandingPage() {
   const navigate = useNavigate();
   useEffect(() => {
     if (user) {
-      navigate(user.role === 'student' ? '/student/dashboard' : '/company/dashboard', { replace: true });
+      navigate(user.role === 'student' ? '/student-dashboard' : '/company-dashboard', { replace: true });
     }
   }, [user, navigate]);
 
@@ -55,8 +55,8 @@ export default function LandingPage() {
             >
               {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
             </button>
-            <Link to="/student/login" className="btn-ghost text-sm hidden sm:inline-flex">Sign In</Link>
-            <Link to="/student/register" className="btn-primary text-sm">Get Started</Link>
+            <Link to="/student-login" className="btn-ghost text-sm hidden sm:inline-flex">Sign In</Link>
+            <Link to="/student-register" className="btn-primary text-sm">Get Started</Link>
           </div>
         </div>
       </nav>
@@ -96,12 +96,12 @@ export default function LandingPage() {
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16
                           animate-slide-up" style={{ animationDelay: '0.2s' }}>
-            <Link to="/student/register"
+            <Link to="/student-register"
                   className="btn-primary text-base px-8 py-3.5 shadow-glow-primary group">
               Start as Student
               <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
             </Link>
-            <Link to="/company/register"
+            <Link to="/company-register"
                   className="btn-purple text-base px-8 py-3.5 shadow-glow-purple group">
               Hire as Company
               <Building2 size={18} className="group-hover:scale-110 transition-transform" />
@@ -153,11 +153,11 @@ export default function LandingPage() {
                 ))}
               </ul>
               <div className="flex flex-col gap-2">
-                <Link to="/student/login" className="btn-primary w-full group/btn">
+                <Link to="/student-login" className="btn-primary w-full group/btn">
                   Login as Student
                   <ArrowRight size={16} className="group-hover/btn:translate-x-1 transition-transform" />
                 </Link>
-                <Link to="/student/register"
+                <Link to="/student-register"
                       className="text-center text-sm text-indigo-600 dark:text-indigo-400
                                  hover:underline font-medium">
                   Create Student Account →
@@ -187,11 +187,11 @@ export default function LandingPage() {
                 ))}
               </ul>
               <div className="flex flex-col gap-2">
-                <Link to="/company/login" className="btn-purple w-full group/btn">
+                <Link to="/company-login" className="btn-purple w-full group/btn">
                   Login as Company
                   <ArrowRight size={16} className="group-hover/btn:translate-x-1 transition-transform" />
                 </Link>
-                <Link to="/company/register"
+                <Link to="/company-register"
                       className="text-center text-sm text-violet-600 dark:text-violet-400
                                  hover:underline font-medium">
                   Register Company →
@@ -245,11 +245,11 @@ export default function LandingPage() {
                 Join thousands of students and companies using TalentFlow for smart internship matching.
               </p>
               <div className="flex flex-col sm:flex-row justify-center gap-4">
-                <Link to="/student/register"
+                <Link to="/student-register"
                       className="btn bg-white text-indigo-700 hover:bg-indigo-50 text-base px-8 py-3.5 shadow-lg">
                   Get Started Free
                 </Link>
-                <Link to="/company/register"
+                <Link to="/company-register"
                       className="btn bg-white/10 text-white border border-white/20
                                  hover:bg-white/20 text-base px-8 py-3.5">
                   Post Internship

@@ -41,7 +41,7 @@ export default function StudentRegister() {
     e.preventDefault();
     setLoading(true);
     try {
-      const userData = registerStudent({ ...form, skills });
+      const userData = await registerStudent({ ...form, skills });
       if (resume) {
         try {
           const text = await extractTextFromPDF(resume);
@@ -54,16 +54,18 @@ export default function StudentRegister() {
             reader.readAsDataURL(resume);
           });
           const resumeBase64 = await base64Promise;
-          saveResumeSkills(userData.id, extracted, text, resumeBase64);
+          await saveResumeSkills(userData.id, extracted, text, resumeBase64);
           toast.success(`Registered! ${extracted.length} skills extracted.`);
-        } catch {
+        } catch (resumeError) {
+          console.error('Resume processing error:', resumeError);
           toast.success('Registered! Resume parsing available later.');
         }
       } else {
         toast.success('Account created successfully!');
       }
-      navigate('/student/dashboard');
+      navigate('/student-login');
     } catch (err) {
+      console.error('Registration error:', err);
       toast.error(err.message || 'Registration failed');
     } finally {
       setLoading(false);

@@ -1,6 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";// Data save karne ke liye
+import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
   apiKey: "AIzaSyB42u8Oj9vdg0M1cdQAXaaWbM48zOB3ONc",
@@ -14,3 +15,4 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app); // <--- 'export' hona zaroori hai
 export const db = getFirestore(app);
+export const storage = getStorage(app);

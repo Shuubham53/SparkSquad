@@ -25,14 +25,15 @@ export default function CompanyRegister() {
     setForm(prev => ({ ...prev, [name]: value }));
   }, []);
 
-  const handleSubmit = useCallback((e) => {
+  const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
-      registerCompany(form);
+      await registerCompany(form);
       toast.success('Company registered successfully!');
-      navigate('/company/dashboard');
+      navigate('/company-login');
     } catch (err) {
+      console.error('Registration error:', err);
       toast.error(err.message || 'Registration failed');
     } finally {
       setLoading(false);

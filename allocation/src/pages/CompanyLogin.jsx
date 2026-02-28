@@ -18,14 +18,15 @@ export default function CompanyLogin() {
     setForm(prev => ({ ...prev, [name]: value }));
   }, []);
 
-  const handleSubmit = useCallback((e) => {
+  const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
-      loginCompany(form.email, form.password);
+      await loginCompany(form.email, form.password);
       toast.success('Welcome back!');
-      navigate('/company/dashboard', { replace: true });
+      navigate('/company-dashboard', { replace: true });
     } catch (err) {
+      console.error('Login error:', err);
       toast.error(err.message || 'Login failed');
     } finally {
       setLoading(false);

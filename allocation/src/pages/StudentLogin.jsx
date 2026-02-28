@@ -18,14 +18,15 @@ export default function StudentLogin() {
     setForm(prev => ({ ...prev, [name]: value }));
   }, []);
 
-  const handleSubmit = useCallback((e) => {
+  const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
-      loginStudent(form.email, form.password);
+      await loginStudent(form.email, form.password);
       toast.success('Welcome back!');
-      navigate('/student/dashboard', { replace: true });
+      navigate('/student-dashboard', { replace: true });
     } catch (err) {
+      console.error('Login error:', err);
       toast.error(err.message || 'Login failed');
     } finally {
       setLoading(false);

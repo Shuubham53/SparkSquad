@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import toast from 'react-hot-toast';
-import { useAuth } from '../context/authContext';
+import { useAuth } from '../context/AuthContext';
 import DashboardLayout from '../components/layout/DashboardLayout';
 import StatsCard from '../components/ui/StatsCard';
 import EmptyState from '../components/ui/EmptyState';
@@ -15,7 +15,7 @@ import {
   getStudentProfile, updateStudentProfile, saveResumeSkills,
   getSuggestedInternships, applyToInternship, getAppliedInternships,
 } from '../services/studentService';
-import { extractTextFromPDF } from '../utils/resumeParser';
+import { extractTextFromPDF, processResumeAI } from '../utils/resumeParser';
 import { extractSkillsFromText } from '../utils/skillDatabase';
 
 export default function StudentDashboard() {
@@ -33,18 +33,20 @@ export default function StudentDashboard() {
   const [accepted, setAccepted] = useState([]);
   const fileRef = useRef();
 
-  const loadData = useCallback(() => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const prof = getStudentProfile(user.id);
+      const prof = await getStudentProfile(user.id);
       setProfile(prof);
       setEditForm(prof);
-      setInternships(getSuggestedInternships(user.id));
-      const appliedList = getAppliedInternships(user.id);
+      const internships = await getSuggestedInternships(user.id);
+      setInternships(internships);
+      const appliedList = await getAppliedInternships(user.id);
       setApplied(appliedList);
       const acceptedList = appliedList.filter(app => app.applicationStatus === 'accepted');
       setAccepted(acceptedList);
-    } catch {
+    } catch (error) {
+      console.error('Error loading data:', error);
       toast.error('Failed to load data');
     } finally {
       setLoading(false);
@@ -53,53 +55,52 @@ export default function StudentDashboard() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const handleApply = useCallback((id) => {
+  const handleApply = useCallback(async (id) => {
     setApplying(id);
     try {
-      applyToInternship(user.id, id);
+      await applyToInternship(user.id, id);
       toast.success('Applied successfully!');
-      loadData();
+      await loadData();
     } catch (err) {
+      console.error('Error applying:', err);
       toast.error(err.message || 'Application failed');
     } finally {
       setApplying(null);
     }
   }, [user.id, loadData]);
 
-  const handleResumeUpload = useCallback(async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploadingResume(true);
-    try {
-      const text = await extractTextFromPDF(file);
-      const extracted = extractSkillsFromText(text);
-      const reader = new FileReader();
-      const base64Promise = new Promise((resolve, reject) => {
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-      const resumeBase64 = await base64Promise;
-      saveResumeSkills(user.id, extracted, text, resumeBase64);
-      refreshUser();
-      toast.success(`${extracted.length} skills extracted!`);
-      loadData();
-    } catch {
-      toast.error('Resume parsing failed');
-    } finally {
-      setUploadingResume(false);
+const handleResumeUpload = useCallback(async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  setUploadingResume(true);
+  try {
+    const result = await processResumeAI(user.id, file);
+    
+    if (result.success) {
+      await refreshUser();
+      toast.success(`Resume processed by AI!`);
+      await loadData();
+    } else {
+      toast.error(result.error);
     }
-  }, [user.id, refreshUser, loadData]);
+  } catch (err) {
+    console.error('Error uploading resume:', err);
+    toast.error('Resume parsing failed');
+  } finally {
+    setUploadingResume(false);
+  }
+}, [user.id, refreshUser, loadData]);
 
-  const handleProfileUpdate = useCallback(() => {
+  const handleProfileUpdate = useCallback(async () => {
     try {
       const { profileCompletion, extractedSkills, resumeText, resumeFile, role, id, email, createdAt, ...rest } = editForm;
-      updateStudentProfile(user.id, rest);
-      refreshUser();
+      await updateStudentProfile(user.id, rest);
+      await refreshUser();
       toast.success('Profile updated!');
       setEditMode(false);
-      loadData();
-    } catch {
+      await loadData();
+    } catch (error) {
+      console.error('Error updating profile:', error);
       toast.error('Update failed');
     }
   }, [editForm, user.id, refreshUser, loadData]);
